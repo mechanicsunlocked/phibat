@@ -6,11 +6,14 @@ Windows shows the percentage and a guess at the time left; it never says how har
 machine is pulling on the battery right now. phibat asks the battery itself every two
 seconds and draws the watts next to the battery icon:
 
-- white or black digits, whichever the taskbar needs; green while charging
+- one decimal below 10 W, whole watts above; white or black digits, whichever the taskbar
+  needs; green while charging
 - `AC` on mains with a full battery, `--` without a battery, `?` for a battery that
   does not report its rate
 - hover for the exact figure, the charge and the time left
 - left click opens the battery settings; right click: **Start with Windows**, **Quit**
+- on its first run it moves itself out of the hidden overflow menu, next to the battery icon;
+  hide it again by dragging and it stays hidden
 
 ## Install
 

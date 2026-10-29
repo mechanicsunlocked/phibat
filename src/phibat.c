@@ -42,6 +42,7 @@ static int added;
 static wchar_t shown_txt[8];
 static unsigned shown_rgb;
 static UINT taskbar_created;
+static int promote_tries = 15;   /* ticks left to find our icon in explorer's list */
 
 /* ---------- reading the battery ---------- */
 
@@ -141,10 +142,10 @@ static void describe(const Bat *b, wchar_t *txt, size_t ntxt, unsigned *rgb, wch
         _snwprintf(tip, ntip, L"phibat — this battery does not report its rate%ls", rest);
     } else if (b->mw > IDLE_MW) {
         *rgb = 0x3DDC84;
-        _snwprintf(txt, ntxt, L"%.0f", w);
+        _snwprintf(txt, ntxt, w < 9.95 ? L"%.1f" : L"%.0f", w);   /* 5.4, then 12, 45, 140 */
         _snwprintf(tip, ntip, L"phibat — charging at %.1f W%ls", w, rest);
     } else if (b->mw < -IDLE_MW) {
-        _snwprintf(txt, ntxt, L"%.0f", w);
+        _snwprintf(txt, ntxt, w < 9.95 ? L"%.1f" : L"%.0f", w);
         _snwprintf(tip, ntip, L"phibat — %.1f W%ls", w, rest);
     } else {
         _snwprintf(txt, ntxt, b->ac ? L"AC" : L"0");
@@ -180,11 +181,20 @@ static HICON make_icon(const wchar_t *txt, unsigned rgb)
     HGDIOBJ oldbmp = SelectObject(dc, dib);
     ZeroMemory(bits, (size_t)size * size * 4);
 
-    int len = lstrlenW(txt);   /* one glyph fills the square, three have to squeeze */
-    int fh = len <= 1 ? size * 90 / 100 : len == 2 ? size * 74 / 100 : size * 52 / 100;
+    /* As tall as the square allows, shrunk until the text fits its width. */
+    int fh = size * 90 / 100;
     HFONT font = CreateFontW(-fh, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                              CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
     HGDIOBJ oldfont = SelectObject(dc, font);
+    SIZE ext;
+    if (GetTextExtentPoint32W(dc, txt, lstrlenW(txt), &ext) && ext.cx > size) {
+        fh = fh * size / ext.cx;
+        SelectObject(dc, oldfont);
+        DeleteObject(font);
+        font = CreateFontW(-fh, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                           CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+        SelectObject(dc, font);
+    }
     SetBkMode(dc, TRANSPARENT);
     SetTextColor(dc, RGB(255, 255, 255));   /* white: the red channel is the coverage */
     RECT rc = { 0, 0, size, size };
@@ -247,6 +257,40 @@ static void refresh(void)
     shown_rgb = rgb;
 }
 
+/* Windows 11 parks every new tray icon in the overflow menu behind the chevron.
+ * When this exe's icon first appears, mark it promoted so it sits next to the
+ * battery icon. A value already there, set by the user either way, is left alone.
+ * Returns 1 once the icon's entry has been seen. */
+static int promote(void)
+{
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(NULL, exe, MAX_PATH);
+    HKEY root;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\NotifyIconSettings", 0, KEY_READ, &root) != ERROR_SUCCESS) return 0;
+    int seen = 0;
+    wchar_t name[64];
+    for (DWORD i = 0; !seen; i++) {
+        DWORD n = ARRAYSIZE(name);
+        if (RegEnumKeyExW(root, i, name, &n, NULL, NULL, NULL, NULL) != ERROR_SUCCESS) break;
+        HKEY k;
+        if (RegOpenKeyExW(root, name, 0, KEY_READ | KEY_SET_VALUE, &k) != ERROR_SUCCESS) continue;
+        wchar_t path[MAX_PATH];
+        DWORD sz = sizeof path;
+        if (RegGetValueW(k, NULL, L"ExecutablePath", RRF_RT_REG_SZ, NULL, path, &sz) == ERROR_SUCCESS
+            && lstrcmpiW(path, exe) == 0) {
+            DWORD v, vs = sizeof v;
+            if (RegGetValueW(k, NULL, L"IsPromoted", RRF_RT_REG_DWORD, NULL, &v, &vs) != ERROR_SUCCESS) {
+                v = 1;
+                RegSetValueExW(k, L"IsPromoted", 0, REG_DWORD, (const BYTE *)&v, sizeof v);
+            }
+            seen = 1;
+        }
+        RegCloseKey(k);
+    }
+    RegCloseKey(root);
+    return seen;
+}
+
 /* ---------- autostart, menu ---------- */
 
 static int autostart_get(void)
@@ -304,6 +348,10 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             ShellExecuteW(NULL, L"open", L"ms-settings:batterysaver", NULL, NULL, SW_SHOWNORMAL);
         return 0;
     case WM_TIMER:
+        refresh();
+        if (added && promote_tries > 0 && promote()) promote_tries = 0;   /* explorer files the icon a moment after NIM_ADD */
+        else if (promote_tries > 0) promote_tries--;
+        return 0;
     case WM_POWERBROADCAST:
         refresh();
         return 0;

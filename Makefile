@@ -2,7 +2,7 @@
 #   Linux (cross):  make              needs mingw-w64
 #   Windows MSYS2:  make CROSS=       in a UCRT64/MINGW64 shell
 
-VERSION := 0.1.0
+VERSION := 0.1.1
 CROSS   ?= x86_64-w64-mingw32-
 CC      := $(CROSS)gcc
 WINDRES := $(CROSS)windres
