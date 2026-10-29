@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
+PackageIdentifier: @ID@
+PackageVersion: @VERSION@
+PackageLocale: en-US
+Publisher: @PUBLISHER@
+PublisherUrl: @REPO_URL@
+PublisherSupportUrl: @REPO_URL@/issues
+PackageName: phibat
+PackageUrl: @REPO_URL@
+License: MIT
+LicenseUrl: @REPO_URL@/blob/main/LICENSE
+ShortDescription: The battery's draw in watts, as a number in the tray.
+Description: |-
+  phibat asks the battery for its rate every two seconds and draws the watts next to
+  the battery icon: digits that match the taskbar, green while charging, with the exact
+  figure, the charge and the time left in the tooltip. A single small static exe with
+  no services, no installer and nothing to configure.
+Tags:
+- battery
+- power
+- watts
+- tray
+- laptop
+ReleaseNotesUrl: @REPO_URL@/releases/tag/v@VERSION@
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0
